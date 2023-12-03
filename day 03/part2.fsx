@@ -45,24 +45,27 @@ type Bundle =
     | Symbol of char
     | Number of int
 
-let digit (Digit d) = d
-
 let rec bundle (line: (Location * Entry) list) : (Location list * Bundle) list =
     match line with
     | [] -> []
     | (_, Digit _) :: t ->
         let bundled =
             line
-            |> List.takeWhile (fun (loc, entry) ->
+            |> List.takeWhile (fun (_, entry) ->
                 match entry with
                 | Digit _ -> true
                 | _ -> false)
 
         let rest = line |> List.skip (bundled |> Seq.length)
 
+        let digit =
+            function
+            | Digit d -> Some d
+            | _ -> None
+
         let number =
             bundled
-            |> List.map (snd >> digit)
+            |> List.choose (snd >> digit)
             |> String.concat ""
             |> int
             |> Number
