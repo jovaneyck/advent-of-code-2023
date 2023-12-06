@@ -4,9 +4,9 @@
 #r "nuget: Unquote"
 open Swensen.Unquote
 
-let input =
-    System.IO.File.ReadAllLines $"""{__SOURCE_DIRECTORY__}\input.txt"""
-    |> List.ofSeq
+//let input =
+//    System.IO.File.ReadAllLines $"""{__SOURCE_DIRECTORY__}\input.txt"""
+//    |> List.ofSeq
 
 let example =
     """seeds: 79 14 55 13
@@ -46,19 +46,27 @@ let example =
     |> Array.map (fun s -> s.Trim())
     |> List.ofSeq
 
-type Entry =
-    { SourceStart: uint64
-      DestinationStart: uint64
-      RangeLength: uint64 }
+type Range =
+    { Start: int64
+      Length: int64 }
+
+    member this.End = this.Start + this.Length
+
+module Range =
+    let create start length = { Start = start; Length = length }
+
+    let contains number range =
+        range.Start <= number && number < range.End
+
+type Entry = { Range: Range; Offset: int64 }
 
 type Map = Entry list
 
 let parseEntry (entry: string) =
-    let [| dest; src; length |] = entry.Split(" ") |> Array.map uint64
+    let [| dest; src; length |] = entry.Split(" ") |> Array.map int64
 
-    { SourceStart = src
-      DestinationStart = dest
-      RangeLength = length }
+    { Range = Range.create src length
+      Offset = dest - src }
 
 let rec chunkBy sep lines =
     if lines |> Seq.isEmpty then
@@ -68,22 +76,12 @@ let rec chunkBy sep lines =
         let rest = lines |> List.skip (nextChunk.Length + 1)
         nextChunk :: (chunkBy sep rest)
 
-type Range = { Start: uint64; Length: uint64 }
-
-let inSourceRange number (entry: Entry) =
-    entry.SourceStart <= number
-    && number <= entry.SourceStart + entry.RangeLength
-
-let corresponding number (entry: Entry) =
-    let offset = number - entry.SourceStart
-    entry.DestinationStart + offset
-
 let lookup (map: Map) number =
-    let entry = map |> List.tryFind (inSourceRange number)
+    let entry = map |> List.tryFind (fun entry -> entry.Range |> Range.contains number)
 
     match entry with
     | None -> number
-    | Some entry -> (corresponding number entry)
+    | Some entry -> number + entry.Offset
 
 let debug msg x =
     //printfn msg
@@ -91,26 +89,60 @@ let debug msg x =
     x
 
 let seeds =
-    (input[ 0 ].Split("seeds: ")[1]).Split(" ")
+    (example[0].Split("seeds: ")[1]).Split(" ")
     |> Array.chunkBySize 2
     |> Array.map (fun [| start; length |] ->
-        { Start = uint64 start
-          Length = uint64 length })
+        { Start = int64 start
+          Length = int64 length })
     |> Seq.toList
 
-let chunks = chunkBy "" input
+let chunks = chunkBy "" example
 
-let seedToSoil: Map = chunks[1] |> List.skip 1 |> List.map parseEntry
-let soilToFertilizer: Map = chunks[2] |> List.skip 1 |> List.map parseEntry
-let fertilizerToWater: Map = chunks[3] |> List.skip 1 |> List.map parseEntry
-let waterToLight: Map = chunks[4] |> List.skip 1 |> List.map parseEntry
-let lightToTemperature: Map = chunks[5] |> List.skip 1 |> List.map parseEntry
-let temperatureToHumidity: Map = chunks[6] |> List.skip 1 |> List.map parseEntry
-let humidityToLocation: Map = chunks[7] |> List.skip 1 |> List.map parseEntry
+let seedToSoil: Map =
+    chunks[1]
+    |> List.skip 1
+    |> List.map parseEntry
+    |> List.sortBy (fun e -> e.Range.Start)
+
+let soilToFertilizer: Map =
+    chunks[2]
+    |> List.skip 1
+    |> List.map parseEntry
+    |> List.sortBy (fun e -> e.Range.Start)
+
+let fertilizerToWater: Map =
+    chunks[3]
+    |> List.skip 1
+    |> List.map parseEntry
+    |> List.sortBy (fun e -> e.Range.Start)
+
+let waterToLight: Map =
+    chunks[4]
+    |> List.skip 1
+    |> List.map parseEntry
+    |> List.sortBy (fun e -> e.Range.Start)
+
+let lightToTemperature: Map =
+    chunks[5]
+    |> List.skip 1
+    |> List.map parseEntry
+    |> List.sortBy (fun e -> e.Range.Start)
+
+let temperatureToHumidity: Map =
+    chunks[6]
+    |> List.skip 1
+    |> List.map parseEntry
+    |> List.sortBy (fun e -> e.Range.Start)
+
+let humidityToLocation: Map =
+    chunks[7]
+    |> List.skip 1
+    |> List.map parseEntry
+    |> List.sortBy (fun e -> e.Range.Start)
 
 
 let lookupchain =
-    debug "\n let's go"
+    debug "\n let's go for seed:"
     >> (lookup seedToSoil)
     >> debug "seed to soil"
     >> (lookup soilToFertilizer)
@@ -128,7 +160,7 @@ let lookupchain =
 
 let expand (seeds: Range list) =
     seeds
-    |> Seq.collect (fun range -> [ range.Start .. range.Start + range.Length - 1UL ])
+    |> Seq.collect (fun range -> [ range.Start .. range.Start + range.Length - 1L ])
 
 let expanded = expand seeds
 
@@ -145,41 +177,12 @@ let run () =
     printf "Testing.."
     test <@ chunkBy "" [ ""; "a"; "b"; ""; "c"; "d" ] = [ [ "a"; "b" ]; [ "c"; "d" ] ] @>
 
-    test
-        <@ inSourceRange
-            10UL
-            { SourceStart = 8UL
-              RangeLength = 2UL
-              DestinationStart = 1UL } @>
-
-    test
-        <@ inSourceRange
-            10UL
-
-            { SourceStart = 10UL
-              RangeLength = 2UL
-              DestinationStart = 1UL } @>
-
-    test
-        <@ inSourceRange
-            10UL
-
-            { SourceStart = 7UL
-              RangeLength = 2UL
-              DestinationStart = 1UL }
-           |> not @>
-
-    test
-        <@ inSourceRange
-            10UL
-
-            { SourceStart = 11UL
-              RangeLength = 2UL
-              DestinationStart = 1UL }
-           |> not @>
-
-    test <@ lookup seedToSoil 53UL = 55UL @>
-    test <@ lookup seedToSoil 1337UL = 1337UL @>
+    test <@ { Start = 8L; Length = 3L } |> Range.contains 10L @>
+    test <@ { Start = 8L; Length = 2L } |> Range.contains 10L |> not @>
+    test <@ { Start = 10L; Length = 2L } |> Range.contains 10L @>
+    test <@ { Start = 11L; Length = 2L } |> Range.contains 10L |> not @>
+    test <@ lookup seedToSoil 53L = 55L @>
+    test <@ lookup seedToSoil 1337L = 1337L @>
     printfn "...done!"
 
 run ()
