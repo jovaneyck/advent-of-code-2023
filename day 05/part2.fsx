@@ -46,20 +46,32 @@ let example =
     |> Array.map (fun s -> s.Trim())
     |> List.ofSeq
 
+/// <summary>
+/// Represents a head-inclusive tail-exclusive range
+/// </summary>
 type Range =
     { Start: int64
       Length: int64 }
 
     member this.End = this.Start + this.Length
 
+/// <summary>
+/// Represents a head-inclusive tail-exclusive range
+/// </summary>
 module Range =
     let create start length = { Start = start; Length = length }
 
     let contains number range =
         range.Start <= number && number < range.End
 
-type Entry = { Range: Range; Offset: int64 }
+    let isEmpty range = range.Length < 0
 
+    let overlap (one: Range) (other: Range) =
+        let start = max one.Start other.Start
+        let ending = min one.End other.End
+        create start (ending - start)
+
+type Entry = { Range: Range; Offset: int64 }
 type Map = Entry list
 
 let parseEntry (entry: string) =
@@ -75,18 +87,6 @@ let rec chunkBy sep lines =
         let nextChunk = lines |> List.skip 1 |> List.takeWhile ((<>) sep)
         let rest = lines |> List.skip (nextChunk.Length + 1)
         nextChunk :: (chunkBy sep rest)
-
-let lookup (map: Map) number =
-    let entry = map |> List.tryFind (fun entry -> entry.Range |> Range.contains number)
-
-    match entry with
-    | None -> number
-    | Some entry -> number + entry.Offset
-
-let debug msg x =
-    //printfn msg
-    //printfn "%A" x
-    x
 
 let seeds =
     (example[0].Split("seeds: ")[1]).Split(" ")
@@ -140,38 +140,37 @@ let humidityToLocation: Map =
     |> List.map parseEntry
     |> List.sortBy (fun e -> e.Range.Start)
 
+let rec transform (map: Map) (entry: Entry) : Map =
+    if entry.Range |> Range.isEmpty then
+        [] //Fully transformed the range
+    else
+        match map with
+        | [] -> [ entry ] //no more entries, identity
+        | h :: t ->
+            let overlap = Range.overlap entry.Range h.Range
 
-let lookupchain =
-    debug "\n let's go for seed:"
-    >> (lookup seedToSoil)
-    >> debug "seed to soil"
-    >> (lookup soilToFertilizer)
-    >> debug "soil to fert"
-    >> (lookup fertilizerToWater)
-    >> debug "fert to water"
-    >> (lookup waterToLight)
-    >> debug "water to light"
-    >> (lookup lightToTemperature)
-    >> debug "light to temp"
-    >> (lookup temperatureToHumidity)
-    >> debug "temp to hum"
-    >> (lookup humidityToLocation)
-    >> debug "humidity to loc"
+            if overlap |> Range.isEmpty then
+                transform t entry //no overlap, proceed to next entry
+            else if entry.Range = overlap then //exact match, apply offset
+                [ { Range = overlap
+                    Offset = entry.Offset + h.Offset } ]
+            else
+                []
 
-let expand (seeds: Range list) =
-    seeds
-    |> Seq.collect (fun range -> [ range.Start .. range.Start + range.Length - 1L ])
+//let transformed = seeds |> List.collect (transform seedToSoil)
+//let seedToLocation seeds =
+//    [ seedToSoil
+//      soilToFertilizer
+//      fertilizerToWater
+//      waterToLight
+//      lightToTemperature
+//      temperatureToHumidity
+//      humidityToLocation ]
+//    |> List.fold (fun x map -> transform map x) seeds
 
-let expanded = expand seeds
-
-let l x =
-    let result = lookupchain x
-    //printfn "%A: %A" x result
-    result
+//let transformed = [ seeds ] |> List.collect seedToLocation
 
 #time
-let soils = expanded |> Seq.map l
-soils |> Seq.min
 
 let run () =
     printf "Testing.."
@@ -181,8 +180,9 @@ let run () =
     test <@ { Start = 8L; Length = 2L } |> Range.contains 10L |> not @>
     test <@ { Start = 10L; Length = 2L } |> Range.contains 10L @>
     test <@ { Start = 11L; Length = 2L } |> Range.contains 10L |> not @>
-    test <@ lookup seedToSoil 53L = 55L @>
-    test <@ lookup seedToSoil 1337L = 1337L @>
+
+    test <@ Range.create 2 2 = Range.overlap (Range.create 1 3) (Range.create 2 3) @>
+
     printfn "...done!"
 
 run ()
