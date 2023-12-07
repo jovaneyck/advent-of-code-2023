@@ -59,17 +59,32 @@ type Range =
 /// Represents a head-inclusive tail-exclusive range
 /// </summary>
 module Range =
-    let create start length = { Start = start; Length = length }
+    let create start ending =
+        { Start = start
+          Length = ending - start }
+
+    let createStartLength start length = { Start = start; Length = length }
 
     let contains number range =
         range.Start <= number && number < range.End
 
     let isEmpty range = range.Length < 0
 
-    let overlap (one: Range) (other: Range) =
+    let overlap (other: Range) (one: Range) =
         let start = max one.Start other.Start
         let ending = min one.End other.End
-        create start (ending - start)
+        create start ending
+
+    /// <summary>
+    /// splits a range at elements in the range (not an index).
+    /// </summary>
+    let split positions (range : Range) : Range list = [ range ]
+
+    /// <summary>
+    /// Slices one original range given other, resulting in 1..3 subranges of the original depending on the overlaps with other.
+    /// </summary>
+    let slice (other: Range) (original: Range) : Range list = 
+        original |> split [other.Start; other.End]
 
 type Entry = { Range: Range; Offset: int64 }
 type Map = Entry list
@@ -77,7 +92,7 @@ type Map = Entry list
 let parseEntry (entry: string) =
     let [| dest; src; length |] = entry.Split(" ") |> Array.map int64
 
-    { Range = Range.create src length
+    { Range = Range.createStartLength src length
       Offset = dest - src }
 
 let rec chunkBy sep lines =
@@ -89,7 +104,7 @@ let rec chunkBy sep lines =
         nextChunk :: (chunkBy sep rest)
 
 let seeds =
-    (example[0].Split("seeds: ")[1]).Split(" ")
+    (example[ 0 ].Split("seeds: ")[1]).Split(" ")
     |> Array.chunkBySize 2
     |> Array.map (fun [| start; length |] ->
         { Start = int64 start
@@ -151,7 +166,7 @@ let rec transform (map: Map) (entry: Entry) : Map =
 
             if overlap |> Range.isEmpty then
                 transform t entry //no overlap, proceed to next entry
-            else if entry.Range = overlap then //exact match, apply offset
+            else if entry.Range = overlap then //exact match, apply offset and stop
                 [ { Range = overlap
                     Offset = entry.Offset + h.Offset } ]
             else
@@ -177,12 +192,21 @@ let run () =
     test <@ chunkBy "" [ ""; "a"; "b"; ""; "c"; "d" ] = [ [ "a"; "b" ]; [ "c"; "d" ] ] @>
 
     test <@ { Start = 8L; Length = 3L } |> Range.contains 10L @>
-    test <@ { Start = 8L; Length = 2L } |> Range.contains 10L |> not @>
+
+    test
+        <@ { Start = 8L; Length = 2L }
+           |> Range.contains 10L
+           |> not @>
+
     test <@ { Start = 10L; Length = 2L } |> Range.contains 10L @>
-    test <@ { Start = 11L; Length = 2L } |> Range.contains 10L |> not @>
 
-    test <@ Range.create 2 2 = Range.overlap (Range.create 1 3) (Range.create 2 3) @>
+    test
+        <@ { Start = 11L; Length = 2L }
+           |> Range.contains 10L
+           |> not @>
 
+    test <@ Range.createStartLength 1 2 |> _.End = 3 @>
+    test <@ Range.create 1 3 |> _.Length = 2 @>
     printfn "...done!"
 
 run ()
