@@ -58,45 +58,35 @@ let parse (input: string list) =
     (instructions, nodes)
 
 type State =
-    { Locations: string list
+    { Location: string
       CurrentInstruction: int }
+
+let start = "AAA"
+let finish = "ZZZ"
 
 let itemAt index (list: 'a list) = list[index % list.Length]
 
 let generator (nodes, instructions) state =
+    let node = nodes |> Map.find state.Location
+
     let instruction = instructions |> itemAt state.CurrentInstruction
 
-    let nextLocations =
-        state.Locations
-        |> List.map (fun location ->
-            let node = nodes |> Map.find location
-
-            let nextNode =
-                match instruction with
-                | L -> node.Left
-                | R -> node.Right
-
-            nextNode)
+    let nextNode =
+        match instruction with
+        | L -> node.Left
+        | R -> node.Right
 
     //printfn "We're at %A and turning %A" state.Location instruction
 
     let nextState =
-        { Locations = nextLocations
+        { Location = nextNode
           CurrentInstruction = state.CurrentInstruction + 1 }
 
-    Some(state.Locations, nextState)
+    Some(state.Location, nextState)
 
-let solve input =
-    let (instructions, map) = parse input
-
-    let starts =
-        map
-        |> Map.keys
-        |> Seq.filter (fun id -> id.EndsWith('A'))
-        |> Seq.toList
-
+let solvePath map instructions start =
     let initialState =
-        { Locations = starts
+        { Location = start
           CurrentInstruction = 0 }
 
     let path = Seq.unfold (generator (map, instructions)) initialState
@@ -104,19 +94,35 @@ let solve input =
     let (length, _) =
         path
         |> Seq.indexed
-        |> Seq.map (fun (idx, nodes) ->
-            (if nodes |> List.exists (fun n -> n.EndsWith('Z')) then
-                 printfn "Step %d - %A" idx nodes
-             else
-                 ())
-
-            (idx, nodes))
-        |> Seq.find (fun (_, nodes) -> nodes |> List.forall (fun n -> n.EndsWith('Z')))
+        |> Seq.find (fun (_, node) -> node.EndsWith('Z'))
 
     length
 
+let solve input =
+    let (instructions, map) = parse input
+
+    let starts =
+        map
+        |> Map.keys
+        |> Seq.filter (fun node -> node.EndsWith('A'))
+        |> List.ofSeq
+
+    let cycleLengths =
+        starts
+        |> List.map (fun start -> solvePath map instructions start)
+
+    cycleLengths
+
+let rec gcd (x: int64) (y: int64) = if y = 0 then abs x else gcd y (x % y)
+let lcm x y = x * y / (gcd x y)
+
+let cycleLengths = solve input
+
+cycleLengths
+|> List.map int64
+|> List.reduce (fun x y -> lcm x y)
+
 #time
-solve input
 
 let run () =
     printf "Testing.."
