@@ -5,18 +5,8 @@ let input =
     System.IO.File.ReadAllLines $"""{__SOURCE_DIRECTORY__}\input.txt"""
     |> List.ofSeq
 
-let example =
-    """ FF7FSF7F7F7F7F7F---7
-        L|LJ||||||||||||F--J
-        FL-7LJLJ||||||LJL-77
-        F--JF--7||LJLJ7F7FJ-
-        L---JF-JLJ.||-FJLJJ7
-        |F|F-JF---7F7-L7L|7|
-        |FFJF7L7F-JF7|JL---7
-        7-L-JL7||F7|L7F-7F7|
-        L.L7LFJ|||||FJL7||LJ
-        L7JLJL-JLJLJL--JLJ.L"""
-        .Split("\n")
+let trimExample (example: string) =
+    example.Split("\n")
     |> Array.map (fun s -> s.Trim())
     |> List.ofSeq
 
@@ -32,6 +22,11 @@ module Array2D =
 
 type Pipe = char
 type Grid = Pipe [,]
+
+module Grid =
+    let locationOf = Array2D.findIndex
+    let at (r, c) grid = Array2D.get grid r c
+
 let parse lines : Grid = array2D lines
 
 type Direction =
@@ -65,8 +60,8 @@ let flip =
 
 let hasConnection (dir: Direction) (p: Pipe) =
     match p, dir with
-    | 'S', _ -> true //Smelly smell.
-    | '.', _ -> false //Smelly smell.
+    | 'S', _ -> false
+    | '.', _ -> false
     | '-', West -> true
     | '-', East -> true
     | '|', North -> true
@@ -90,7 +85,8 @@ let nextLocation (x, y) direction =
 
 type State =
     { Location: int * int
-      Direction: Direction }
+      Direction: Direction
+      Cycle: ((int * int) * Pipe) list }
 
 let nextDirection dir pipe =
     match pipe, dir with
@@ -110,40 +106,40 @@ let nextDirection dir pipe =
     | 'F', West -> South
     | unknown -> failwithf "Unknown next direction: %A" unknown
 
-let rec buildCycle (grid: Grid) cycle (state: State) =
+let rec buildCycle startLoc (grid: Grid) (state: State) =
     let nextLoc = nextLocation state.Location state.Direction
-    let nextPipe = grid[fst nextLoc, snd nextLoc]
+    let nextPipe = grid |> Grid.at nextLoc
 
-    if nextPipe = 'S' then
-        cycle
+    if nextLoc = startLoc then
+        state.Cycle
     else
         let nextDir = nextDirection state.Direction nextPipe
 
+        let nextCycle = (nextLoc, nextPipe) :: state.Cycle
+
         let nextState =
             { Location = nextLoc
-              Direction = nextDir }
+              Direction = nextDir
+              Cycle = nextCycle }
 
         //printfn "I am at %A and will now go to %A" state nextState
 
-        let nextCycle = nextLoc :: cycle
-        buildCycle grid nextCycle nextState
+        buildCycle startLoc grid nextState
 
-let figureOutStartingPipe dirs =
-    match dirs |> List.sort with
+let startingPiece neighbs =
+    match neighbs |> List.sort with
     | [ North; South ] -> '|'
-    | [ West; East ] -> '-'
-    | [ North; West ] -> 'J'
-    | [ North; East ] -> 'L'
     | [ South; West ] -> '7'
     | [ South; East ] -> 'F'
-    | err -> failwithf "I can't figure out the starting pipe given connecting directions %A" err
+    | err -> failwithf "TODO: %A" err
 
-let findLoop input =
+let findCycle input =
     let grid = parse input
-    let start = grid |> Array2D.findIndex 'S'
+    let start = grid |> Grid.locationOf 'S'
 
     let startingNeighbours =
-        neighbours start grid
+        grid
+        |> neighbours start
         |> List.filter (fun (_, dir, pipe) -> pipe |> hasConnection (flip dir))
 
     let startingDirection =
@@ -151,41 +147,116 @@ let findLoop input =
         |> List.map (fun (_, dir, _) -> dir)
         |> List.head
 
-    let startingPipe =
+    let startingPiece =
         startingNeighbours
         |> List.map (fun (_, dir, _) -> dir)
-        |> figureOutStartingPipe
+        |> startingPiece
 
     let cycle =
         buildCycle
+            start
             grid
-            [ start ]
             { Location = start
-              Direction = startingDirection }
+              Direction = startingDirection
+              Cycle = [ start, startingPiece ] }
 
-    //!!!MUTABLE UPDATE!!!
-    Array2D.set grid (fst start) (snd start) startingPipe
+    cycle
 
-    cycle, grid
+//Raycasting algorithm: cast a ray from loc to the right
+//and count the number of times we hit "vertical parts" of the cycle.
+type InOrOut =
+    | In
+    | Out
+
+let raycast sortedCycle loc =
+    let (row, col) = loc
+    //printfn "Casting ray @ %A" loc
+
+    let relevantPipesOnRay =
+        sortedCycle
+        |> List.filter (fun ((cr, cc), _) -> cr = row && col < cc)
+        |> List.filter (fun (_, pipe) -> '-' <> pipe)
+        |> List.map snd
+
+    let (verticals, others) =
+        relevantPipesOnRay
+        |> List.partition (function
+            | '|' -> true
+            | _ -> false)
+
+    let verticalCollisions = verticals |> List.length
+
+    let isBendCollision =
+        function
+        | [ 'L'; '7' ]
+        | [ 'F'; 'J' ] -> true
+        | [ 'L'; 'J' ]
+        | [ 'F'; '7' ] -> false
+        | err -> failwithf "Unexpected bend pattern: %A" err
+
+    let bendCollisions =
+        others
+        |> List.chunkBySize 2
+        |> List.filter isBendCollision
+        |> List.length
+
+    let nbCollisions = verticalCollisions + bendCollisions
+    if nbCollisions % 2 = 0 then Out else In
+
+let solve (input: string list) =
+    let cycle = findCycle input
+
+    let dimension = input[0].Length
+
+    let allCoords =
+        [ for row in 0 .. (dimension - 1) do
+              for col in 0 .. (dimension - 1) -> (row, col) ]
+
+    let toCheck = allCoords |> List.except (cycle |> List.map fst)
+    let sortedCycle = cycle |> List.sortBy fst
+
+    toCheck
+    |> List.map (fun c -> c, raycast sortedCycle c)
+    |> List.filter (fun (_, io) ->
+        match io with
+        | In -> true
+        | Out -> false)
+    |> List.length
 
 let run () =
     printf "Testing.."
 
-    test <@ figureOutStartingPipe [ North; South ] = '|' @>
-    test <@ figureOutStartingPipe [ West; East ] = '-' @>
-    test <@ figureOutStartingPipe [ West; North ] = 'J' @>
-    test <@ figureOutStartingPipe [ East; South ] = 'F' @>
-    test <@ figureOutStartingPipe [ North; East ] = 'L' @>
-    test <@ figureOutStartingPipe [ West; South ] = '7' @>
+    test
+        <@ """  ...........
+                .S-------7.
+                .|F-----7|.
+                .||.....||.
+                .||.....||.
+                .|L-7.F-J|.
+                .|..|.|..|.
+                .L--J.L--J.
+                ..........."""
+           |> trimExample
+           |> solve = 4 @>
+
+    test
+        <@ """  .F----7F7F7F7F-7....
+                .|F--7||||||||FJ....
+                .||.FJ||||||||L7....
+                FJL7L7LJLJ||LJ.L-7..
+                L--J.L7...LJS7F-7L7.
+                ....F-J..F7FJ|L7L7L7
+                ....L7.F7||L7|.L7L7|
+                .....|FJLJ|FJ|F7|.LJ
+                ....FJL-7.||.||||...
+                ....L---J.LJ.LJLJ..."""
+           |> trimExample
+           |> solve = 8 @>
 
     printfn "...done!"
 
 run ()
 
 #time
-
-//Let's look to the "right" first
-
-//let cycle,grid = findLoop input
-
-let cycle, grid = findLoop example
+//Real: 00:00:02.624, CPU: 00:00:03.062, GC gen0: 21, gen1: 2, gen2: 1
+solve input
