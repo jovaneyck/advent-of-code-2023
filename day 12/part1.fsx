@@ -76,20 +76,27 @@ let rec validCombination sizes chars =
                     | [], [] -> true
                     | [], _ -> false
 
-let records = input |> List.map parse
+let solve input =
+    let records = input |> List.map parse
 
-let allCombos =
-    records
-    |> List.map (fun (chars, sizes) -> (generateCombinations chars, sizes))
+    let allCombos =
+        records
+        |> List.map (fun (chars, sizes) -> (generateCombinations chars, sizes))
 
-let validCombos =
-    allCombos
-    |> List.collect (fun (combos, sizes) -> (combos |> List.filter (validCombination sizes)))
-    |> List.length
+    let validCombos =
+        allCombos
+        |> List.collect (fun (combos, sizes) -> (combos |> List.filter (validCombination sizes)))
+        |> List.length
+
+    validCombos
 
 let run () =
     printf "Testing.."
-    test <@ 1 + 1 = 2 @>
+    test <@ solve example = 21 @>
     printfn "...done!"
 
 run ()
+
+#time
+//Real: 00:00:16.663, CPU: 00:00:47.796, GC gen0: 9, gen1: 4, gen2: 2
+//solve input

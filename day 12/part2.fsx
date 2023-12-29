@@ -1,5 +1,7 @@
 #r "nuget: Unquote"
+
 open Swensen.Unquote
+open System.Collections.Generic
 
 let input =
     System.IO.File.ReadAllLines $"""{__SOURCE_DIRECTORY__}\input.txt"""
@@ -49,42 +51,64 @@ let rec generateCombinations chars =
         let replacedBySpring = generateCombinations (Spring :: cs)
         replacedByEmpty @ replacedBySpring
 
-let rec validCombination sizes chars =
-    match sizes with
-    | [] -> chars |> List.forall ((=) Empty)
-    | s :: ss ->
-        match chars with
-        | [] -> false
-        | Unknown :: _ -> failwith "Did not expect an unkown character in here."
-        | Empty :: cs -> validCombination sizes cs
-        | Spring :: cs ->
-            if cs |> List.length < (s - 1) then
+//MUTABLE dictionary, immutable alternatives exist but are a hassle
+//to thread through recursive functions
+//TODO: investigate whether a state monad could help here?
+type Memo = Dictionary<int list * Char list, bool>
+
+let rec validCombination (memo: Memo) sizes chars =
+    let key = (sizes, chars)
+
+    match memo.TryGetValue(key) with
+    | (true, result) -> result
+    | (false, _) ->
+        let result =
+            if (sizes |> List.sum) > (chars |> Seq.length) then
                 false
             else
-                let otherSprings = cs |> List.take (s - 1)
-                let areAllSprings = (otherSprings |> List.forall ((=) Spring))
+                match sizes with
+                | [] -> chars |> List.forall ((=) Empty)
+                | s :: ss ->
+                    match chars with
+                    | [] -> false
+                    | Unknown :: _ -> failwith "Did not expect an unkown character in here."
+                    | Empty :: cs -> validCombination memo sizes cs
+                    | Spring :: cs ->
+                        if cs |> List.length < (s - 1) then
+                            false
+                        else
+                            let otherSprings = cs |> List.take (s - 1)
+                            let areAllSprings = (otherSprings |> List.forall ((=) Spring))
 
-                if areAllSprings |> not then
-                    false
-                else
-                    let remainder = cs |> List.skip (s - 1)
+                            if areAllSprings |> not then
+                                false
+                            else
+                                let remainder = cs |> List.skip (s - 1)
 
-                    match remainder, ss with
-                    | Unknown :: _, _ -> failwith "Did not expect an unkown character in here."
-                    | Spring :: _, _ -> false
-                    | Empty :: rs, ss -> validCombination ss rs
-                    | [], [] -> true
-                    | [], _ -> false
+                                match remainder, ss with
+                                | Unknown :: _, _ -> failwith "Did not expect an unkown character in here."
+                                | Spring :: _, _ -> false
+                                | Empty :: rs, ss -> validCombination memo ss rs
+                                | [], [] -> true
+                                | [], _ -> false
+
+        memo.Add(key, result)
+        result
 
 let solve records =
     let allCombos =
         records
         |> List.map (fun (chars, sizes) -> (generateCombinations chars, sizes))
 
+    let memo = new Memo(10_000_000)
+
     let validCombos =
         allCombos
-        |> List.collect (fun (combos, sizes) -> (combos |> List.filter (validCombination sizes)))
-        |> List.length
+        |> List.map (fun (combos, sizes) ->
+            (combos
+             |> List.filter (validCombination memo sizes)
+             |> List.length))
+        |> List.sum
 
     validCombos
 
@@ -103,8 +127,8 @@ let replicate (chars, sizes) =
     let replicatedSizes = List.replicate 5 sizes |> List.collect id
     (replicatedChars, replicatedSizes)
 
+let records = input |> List.map parse
+//let replicated = records |> List.map replicate
 
 #time
-let records = input |> List.map parse
-let replicated = records |> List.map replicate
-let result = replicated |> solve
+let result = records |> solve
