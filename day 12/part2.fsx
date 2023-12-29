@@ -1,6 +1,7 @@
 #r "nuget: Unquote"
 
 open Swensen.Unquote
+open System.Collections.Generic
 
 let input =
     System.IO.File.ReadAllLines $"""{__SOURCE_DIRECTORY__}\input.txt"""
@@ -44,29 +45,42 @@ let replicate (chars, sizes) =
     let replicatedSizes = List.replicate 5 sizes |> List.collect id
     (replicatedChars, replicatedSizes)
 
-let rec countCombos (chars, sizes) = 
-    match sizes with
-    | [] -> 
-        if chars |> List.forall (fun c -> c = Empty || c = Unknown) then 1 else 0
-    | s :: ss ->
-        match chars with
-        | [] -> 0
-        | Empty :: cs -> countCombos (cs, sizes)
-        | Spring :: cs when cs |> List.length >= (s-1) ->
-            let (sub, rest) = cs |> List.splitAt (s - 1)
-            let allSprings = sub |> List.forall (fun c -> c = Spring || c = Unknown)
-            if allSprings then 
-                match rest with
-                | [] -> if ss |> List.isEmpty then 1 else 0
-                | Spring :: _ -> 0
-                | Empty :: rs -> countCombos (rs, ss)
-                | Unknown :: rs -> countCombos (rs, ss)
-            else 0
-        | Unknown :: cs ->
-            let asSpring = countCombos ((Spring :: cs),sizes)
-            let asEmpty = countCombos (cs,sizes)
-            asSpring + asEmpty
-        | _ -> 0
+type Memo = Dictionary<Char list * int list,int64>
+
+let countCombos (chars, sizes) = 
+    let rec calc (memo : Memo) (chars, sizes) =
+        let key = (chars, sizes)
+
+        match memo.TryGetValue(key) with
+        | (true, result) -> result
+        | (false, _) ->
+            let result = 
+                match sizes with
+                | [] -> 
+                    if chars |> List.forall (fun c -> c = Empty || c = Unknown) then 1L else 0L
+                | s :: ss ->
+                    match chars with
+                    | [] -> 0L
+                    | Empty :: cs -> calc memo (cs, sizes)
+                    | Spring :: cs when cs |> List.length >= (s-1) ->
+                        let (sub, rest) = cs |> List.splitAt (s - 1)
+                        let allSprings = sub |> List.forall (fun c -> c = Spring || c = Unknown)
+                        if allSprings then 
+                            match rest with
+                            | [] -> if ss |> List.isEmpty then 1L else 0L
+                            | Spring :: _ -> 0L
+                            | Empty :: rs -> calc memo (rs, ss)
+                            | Unknown :: rs -> calc memo (rs, ss)
+                        else 0L
+                    | Unknown :: cs ->
+                        let asSpring = calc memo ((Spring :: cs),sizes)
+                        let asEmpty = calc memo (cs,sizes)
+                        asSpring + asEmpty
+                    | _ -> 0L
+            memo.Add(key, result)
+            result
+
+    calc (new Memo()) (chars,sizes)
 
 let solve records =
     records |> List.map countCombos |> List.sum
