@@ -1,7 +1,9 @@
 #r "nuget: Unquote"
 open Swensen.Unquote
 
-let input = System.IO.File.ReadAllText $"""{__SOURCE_DIRECTORY__}\input.txt"""
+let input =
+    (System.IO.File.ReadAllText $"""{__SOURCE_DIRECTORY__}\input.txt""")
+        .Replace("\r\n", "\n")
 
 let example =
     """#.##..##.
@@ -25,10 +27,10 @@ type Pattern = char [,]
 let parsePattern pattern : Pattern = pattern |> array2D
 
 let parse (input: string) =
-    let rawPatterns = input.Split("\r\n\r\n") |> List.ofSeq
+    let rawPatterns = input.Split("\n\n") |> List.ofSeq
 
     rawPatterns
-    |> List.map (fun s -> s.Split("\r\n"))
+    |> List.map (fun s -> s.Split("\n"))
     |> List.map parsePattern
 
 let verticalSplits m =
@@ -82,31 +84,57 @@ let mirrorLocations pattern =
         |> List.map (fun (i, (f, s)) -> i, (f, horizontalFlip s))
         |> List.filter (fun (i, (a, b)) -> a = b)
         |> List.map fst
-        |> List.tryHead
+        |> List.map Horizontal
 
-    match hor with
-    | Some h -> Horizontal h
-    | None ->
-        let vert =
-            pattern
-            |> verticalSplits
-            |> List.indexed
-            |> List.map (fun (i, f) -> i + 1, trimVertically f)
-            |> List.map (fun (i, (f, s)) -> i, (f, verticalFlip s))
-            |> List.filter (fun (i, (a, b)) -> a = b)
-            |> List.map fst
-            |> List.head
 
-        Vertical vert
+
+    let vert =
+        pattern
+        |> verticalSplits
+        |> List.indexed
+        |> List.map (fun (i, f) -> i + 1, trimVertically f)
+        |> List.map (fun (i, (f, s)) -> i, (f, verticalFlip s))
+        |> List.filter (fun (i, (a, b)) -> a = b)
+        |> List.map fst
+        |> List.map Vertical
+
+
+    hor @ vert |> Set.ofSeq
+
+let flip =
+    function
+    | '.' -> '#'
+    | '#' -> '.'
+
+let smudges m =
+    [ for row in 0 .. (Array2D.length1 m - 1) do
+          for col in 0 .. (Array2D.length2 m - 1) do
+              yield
+                  m
+                  |> Array2D.mapi (fun r c v ->
+                      if r = row && c = col then
+                          flip m[r, c]
+                      else
+                          m[r, c]) ]
 
 let patterns = input |> parse
-let locs = patterns |> List.map mirrorLocations
+
+let locs =
+    patterns
+    |> List.map (fun p -> p, smudges p)
+    |> List.map (fun (p, smuds) ->
+        printfn "looking at %A" p
+        let mirror = p |> mirrorLocations
+        printfn "original mirror at %A" mirror
+        let others = smuds |> List.map mirrorLocations |> Set.unionMany
+        printfn "other mirrors at %A" (others |> Set.map string |> String.concat ",")
+        Set.difference others mirror |> Seq.head)
 
 let result =
     locs
     |> List.map (function
-        | Horizontal h -> 100 * h
-        | Vertical v -> v)
+        | (Horizontal h) -> 100 * h
+        | (Vertical v) -> v)
     |> List.sum
 
 let run () =
