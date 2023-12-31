@@ -42,34 +42,28 @@ let horizontalSplits m =
     [ for row in 0 .. (nbRows - 2) -> m[0..row, *], m[(row + 1) .. nbRows, *] ]
 
 let verticalFlip m =
-    let nbCols = m |> Array2D.length2
     let nbRows = m |> Array2D.length1
+    let nbCols = m |> Array2D.length2
     let initializer row col = m[row, nbCols - 1 - col]
     Array2D.init nbRows nbCols initializer
 
 let horizontalFlip m =
-    let nbCols = m |> Array2D.length2
     let nbRows = m |> Array2D.length1
+    let nbCols = m |> Array2D.length2
     let initializer row col = m[nbRows - 1 - row, col]
     Array2D.init nbRows nbCols initializer
 
-let trimVertically (patternA, patternB) =
-    let minWidth =
-        [ patternA; patternB ]
-        |> List.map Array2D.length2
-        |> List.min
-
-    let widthA = patternA |> Array2D.length2
-    (patternA[*, (widthA - minWidth) .. (widthA - 1)], patternB[*, 0 .. (minWidth - 1)])
-
-let trimHorizontally (patternA, patternB) =
-    let minHeight =
-        [ patternA; patternB ]
-        |> List.map Array2D.length1
-        |> List.min
-
+let trim (patternA, patternB) =
     let heightA = patternA |> Array2D.length1
-    (patternA[(heightA - minHeight) .. (heightA - 1), *], patternB[0 .. (minHeight - 1), *])
+    let heightB = patternB |> Array2D.length1
+    let widthA = patternA |> Array2D.length2
+    let widthB = patternB |> Array2D.length2
+
+    let minHeight = min heightA heightB
+    let minWidth = min widthA widthB
+
+    (patternA[(heightA - minHeight) .. (heightA - 1), (widthA - minWidth) .. (widthA - 1)],
+     patternB[0 .. (minHeight - 1), 0 .. (minWidth - 1)])
 
 type MirrorLocation =
     | Horizontal of int
@@ -79,25 +73,20 @@ let mirrorLocations pattern =
     let hor =
         pattern
         |> horizontalSplits
-        |> List.indexed
-        |> List.map (fun (i, f) -> i + 1, trimHorizontally f)
-        |> List.map (fun (i, (f, s)) -> i, (f, horizontalFlip s))
-        |> List.filter (fun (i, (a, b)) -> a = b)
+        |> List.map trim
+        |> List.mapi (fun i (f, s) -> i + 1, (f, horizontalFlip s))
+        |> List.filter (fun (_, (a, b)) -> a = b)
         |> List.map fst
         |> List.map Horizontal
-
-
 
     let vert =
         pattern
         |> verticalSplits
-        |> List.indexed
-        |> List.map (fun (i, f) -> i + 1, trimVertically f)
-        |> List.map (fun (i, (f, s)) -> i, (f, verticalFlip s))
-        |> List.filter (fun (i, (a, b)) -> a = b)
+        |> List.map trim
+        |> List.mapi (fun i (f, s) -> i + 1, (f, verticalFlip s))
+        |> List.filter (fun (_, (a, b)) -> a = b)
         |> List.map fst
         |> List.map Vertical
-
 
     hor @ vert |> Set.ofSeq
 
@@ -108,40 +97,37 @@ let flip =
 
 let smudges m =
     [ for row in 0 .. (Array2D.length1 m - 1) do
-          for col in 0 .. (Array2D.length2 m - 1) do
-              yield
-                  m
-                  |> Array2D.mapi (fun r c v ->
-                      if r = row && c = col then
-                          flip m[r, c]
-                      else
-                          m[r, c]) ]
+          for col in 0 .. (Array2D.length2 m - 1) ->
+              m
+              |> Array2D.mapi (fun r c v -> if r = row && c = col then flip v else v) ]
 
-let patterns = input |> parse
+let solve input =
+    let patterns = input |> parse
 
-let locs =
-    patterns
-    |> List.map (fun p -> p, smudges p)
-    |> List.map (fun (p, smuds) ->
-        printfn "looking at %A" p
-        let mirror = p |> mirrorLocations
-        printfn "original mirror at %A" mirror
-        let others = smuds |> List.map mirrorLocations |> Set.unionMany
-        printfn "other mirrors at %A" (others |> Set.map string |> String.concat ",")
-        Set.difference others mirror |> Seq.head)
+    let locs =
+        patterns
+        |> List.map (fun p -> p, smudges p)
+        |> List.map (fun (p, smuds) ->
+            let mirror = p |> mirrorLocations
+            let others = smuds |> List.map mirrorLocations |> Set.unionMany
+            Set.difference others mirror |> Seq.head)
 
-let result =
-    locs
-    |> List.map (function
-        | (Horizontal h) -> 100 * h
-        | (Vertical v) -> v)
-    |> List.sum
+    let result =
+        locs
+        |> List.map (function
+            | (Horizontal h) -> 100 * h
+            | (Vertical v) -> v)
+        |> List.sum
+
+    result
 
 let run () =
     let m =
         array2D [ [ 1; 2; 3 ]
                   [ 4; 5; 6 ]
                   [ 7; 8; 9 ] ]
+
+    let smaller = array2D [ [ 1; 2 ]; [ 3; 4 ] ]
 
     printf "Testing.."
 
@@ -153,6 +139,24 @@ let run () =
         <@ verticalSplits m = [ ([ [ 1 ]; [ 4 ]; [ 7 ] ] |> array2D, [ [ 2; 3 ]; [ 5; 6 ]; [ 8; 9 ] ] |> array2D)
                                 ([ [ 1; 2 ]; [ 4; 5 ]; [ 7; 8 ] ] |> array2D, [ [ 3 ]; [ 6 ]; [ 9 ] ] |> array2D) ] @>
 
+    test
+        <@ horizontalFlip m = array2D [ [ 7; 8; 9 ]
+                                        [ 4; 5; 6 ]
+                                        [ 1; 2; 3 ] ] @>
+
+    test
+        <@ verticalFlip m = array2D [ [ 3; 2; 1 ]
+                                      [ 6; 5; 4 ]
+                                      [ 9; 8; 7 ] ] @>
+
+    test <@ trim (smaller, m) = (array2D [ [ 1; 2 ]; [ 3; 4 ] ], array2D [ [ 1; 2 ]; [ 4; 5 ] ]) @>
+    test <@ trim (m, smaller) = (array2D [ [ 5; 6 ]; [ 8; 9 ] ], array2D [ [ 1; 2 ]; [ 3; 4 ] ]) @>
+
+    test <@ solve example = 400 @>
+
     printfn "...done!"
 
 run ()
+
+#time //Real: 00:00:00.592, CPU: 00:00:00.687, GC gen0: 9, gen1: 0, gen2: 0
+solve input
