@@ -90,12 +90,12 @@ let mirrorLocations pattern =
 
     hor @ vert |> Set.ofSeq
 
-let flip =
-    function
-    | '.' -> '#'
-    | '#' -> '.'
-
 let smudges m =
+    let flip =
+        function
+        | '.' -> '#'
+        | '#' -> '.'
+
     [ for row in 0 .. (Array2D.length1 m - 1) do
           for col in 0 .. (Array2D.length2 m - 1) ->
               m
