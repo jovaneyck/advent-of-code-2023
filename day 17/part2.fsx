@@ -171,7 +171,7 @@ let solve input =
     minDist
 
 #time
-//Real: 00:00:07.176, CPU: 00:00:08.515, GC gen0: 8, gen1: 0, gen2: 0
+//Real: 00:00:09.803, CPU: 00:00:11.250, GC gen0: 8, gen1: 0, gen2: 0
 //solve input
 
 let run () =
