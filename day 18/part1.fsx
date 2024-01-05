@@ -1,6 +1,11 @@
 #r "nuget: Unquote"
 open Swensen.Unquote
 
+//Helpful pointers: 
+//* Raycasting/Point-in-Poligon https://en.wikipedia.org/wiki/Point_in_polygon
+//* Shoelace formula https://en.wikipedia.org/wiki/Shoelace_formula#Example
+//* Pick's theorem https://en.wikipedia.org/wiki/Pick%27s_theorem
+
 let input =
     System.IO.File.ReadAllLines $"""{__SOURCE_DIRECTORY__}\input.txt"""
     |> List.ofSeq
