@@ -94,7 +94,7 @@ type Direction =
 type Node =
     { Location: int * int
       Direction: Direction
-      StepsInDirection: int }
+      StepsInDirection: int; }
 
 let parse input : Grid =
     input
@@ -130,12 +130,13 @@ let right (node : Node) =
     |> fwd
 
 let successors grid (node : Node) = 
-    //at most 3 blocks in a single direction
-    // no reversing
+    //must move 4 steps before we can turn
+    //can move 10 steps in a single direction max, then we must turn
     [
-        if node.StepsInDirection < 3 then yield (fwd node)
-        yield left node
-        yield right node
+        if node.StepsInDirection < 10 then yield (fwd node)
+        if 4 <= node.StepsInDirection then 
+            yield left node
+            yield right node
     ]
     |> List.filter (_.Location >> (grid |> Grid.contains))
 
@@ -143,33 +144,51 @@ let cost (grid: Grid) cumulDist (node : Node) =
     let c = grid |> Grid.at node.Location
     cumulDist + c
 
-let grid = parse input
-let start = (0, 0)
+let solve input = 
+    let grid = parse input
+    let start = (0, 0)
 
-let queue: DPQ.State<Node> =
-    [ (0,
-       { Location = start
-         Direction = R
-         StepsInDirection = 0 })
-      (0,
-       { Location = start
-         Direction = D
-         StepsInDirection = 0 }) ]
-    |> DPQ.ofSeq
+    let queue: DPQ.State<Node> =
+        [ (0,
+           { Location = start
+             Direction = R
+             StepsInDirection = 0 })
+          (0,
+           { Location = start
+             Direction = D
+             StepsInDirection = 0 }) ]
+        |> DPQ.ofSeq
 
-let result = dijkstra (successors grid) (cost grid) queue
-let ((_,xmax),(_,ymax)) = grid |> Grid.boundaries
-//Smelly: distances has the nodes instead of the locations
-//AKA multiple results per location (once per entered direction)
-let minDist = 
-    result.Distances 
-    |> Map.filter (fun n _ -> n.Location = (xmax,ymax))
-    |> Map.values
-    |> Seq.min
+    let result = dijkstra (successors grid) (cost grid) queue
+    let ((_,xmax),(_,ymax)) = grid |> Grid.boundaries
+    let minDist = 
+        result.Distances 
+        |> Map.filter (fun n _ -> n.Location = (xmax,ymax))
+        //We need to have at least 4 steps when reaching the finish, other states are illegal.
+        |> Map.filter (fun n _ -> n.StepsInDirection >= 4)
+        |> Map.values
+        |> Seq.min
+    minDist
+
+#time
+//Real: 00:00:07.176, CPU: 00:00:08.515, GC gen0: 8, gen1: 0, gen2: 0
+//solve input
 
 let run () =
     printf "Testing.."
-    test <@ 1 + 1 = 2 @>
+    test <@ solve example = 94 @>
+
+    test <@ 
+            let example =
+                """ 111111111111
+                    999999999991
+                    999999999991
+                    999999999991
+                    999999999991"""
+                    .Split("\n")
+                |> Array.map (fun s -> s.Trim())
+                |> List.ofSeq
+            solve example = 71 @>
     printfn "...done!"
 
 run ()
