@@ -97,8 +97,8 @@ let cycle platform =
 let rec findLoop visited n platform =
     let next = cycle platform
 
-    match visited |> List.tryFind (fun (p, i) -> p = next) with
-    | Some (p, i) -> next, n - i, i
+    match visited |> List.tryFind (fun (p, _) -> p = next) with
+    | Some (_, loopStart) -> next, (n - loopStart + 1), loopStart
     | None -> findLoop ((next, (n + 1)) :: visited) (n + 1) next
 
 let rec run n platform =
@@ -120,20 +120,23 @@ let findLoad platform =
     |> List.map (fun (i, c) -> i * c)
     |> List.sum
 
-let platform: Platform =
-    input
-    |> Seq.map (fun row -> row |> Seq.map (fun cell -> parse cell))
-    |> array2D
+let solve input =
+    let platform: Platform =
+        input
+        |> Seq.map (fun row -> row |> Seq.map (fun cell -> parse cell))
+        |> array2D
+
+    let (platformAfterLoop, loopLength, loopStart) =
+        findLoop [ (platform, 0) ] 0 platform
+
+    let cyclesToRun = (1_000_000_000 - loopStart) % loopLength
+    let finalPlatform = run cyclesToRun platformAfterLoop
+    finalPlatform |> findLoad
 
 #time
 //Using mutable array2D: Real: 00:00:52.462, CPU: 00:00:55.875, GC gen0: 425, gen1: 62, gen2: 2
 //Using array2D copies:  Real: 00:01:36.792, CPU: 00:01:42.250, GC gen0: 2208, gen1: 118, gen2: 1
-let (platformAfterLoop, loopLength, loopStart) =
-    findLoop [ (platform, 0) ] 0 platform
-
-let cyclesToRun = (1_000_000_000 - loopStart) % (loopLength + 1)
-let finalPlatform = run cyclesToRun platformAfterLoop
-finalPlatform |> findLoad
+solve input
 
 let runT () =
     printf "Testing.."
@@ -165,6 +168,8 @@ let runT () =
            let expected = array2D [ [ 3; 1 ]; [ 4; 2 ] ]
 
            actual = expected @>
+
+    test <@ solve example = 64 @>
 
     printfn "...done!"
 
