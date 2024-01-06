@@ -75,16 +75,17 @@ let rec dijkstra successors cost (pq: DPQ.State<'a>) =
         dijkstra successors cost nextpq
 
 type Grid = int [,]
-module Grid = 
-    let boundaries grid = ((0,Array2D.length1 grid - 1),(0, Array2D.length2 grid - 1))
-    
-    let at (x,y) (grid : Grid) = grid[x,y]
-    
-    let contains (grid : Grid) (x,y) = 
-        let ((minx,maxx),(miny,maxy)) = boundaries grid
-        minx <= x && x <= maxx
-        && miny <= y && y <= maxy
-    
+
+module Grid =
+    let boundaries grid =
+        ((0, Array2D.length1 grid - 1), (0, Array2D.length2 grid - 1))
+
+    let at (x, y) (grid: Grid) = grid[x, y]
+
+    let contains (x, y) (grid: Grid) =
+        let ((minx, maxx), (miny, maxy)) = boundaries grid
+        minx <= x && x <= maxx && miny <= y && y <= maxy
+
 type Direction =
     | U
     | D
@@ -94,59 +95,72 @@ type Direction =
 type Node =
     { Location: int * int
       Direction: Direction
-      StepsInDirection: int; }
+      StepsInDirection: int }
 
 let parse input : Grid =
     input
     |> List.map (fun line -> line |> Seq.map (string >> int))
     |> array2D
 
-let shift (dx, dy) (x,y) = x+dx,y+dy
+let shift (dx, dy) (x, y) = x + dx, y + dy
 
-let fwd (node : Node) =
+let fwd (node: Node) =
     let delta =
         match node.Direction with
-        | U -> (-1,0)
-        | D -> (1,0)
-        | L -> (0,-1)
-        | R -> (0,1)
-    { node with StepsInDirection = node.StepsInDirection + 1; Location = shift delta node.Location }
+        | U -> (-1, 0)
+        | D -> (1, 0)
+        | L -> (0, -1)
+        | R -> (0, 1)
 
-let left (node : Node) = 
-    let rotate = function
-    | U -> L
-    | L -> D
-    | D -> R
-    | R -> U
-    { node with Direction = rotate node.Direction; StepsInDirection = 0 }
-    |> fwd
-let right (node : Node) = 
-    let rotate = function
-    | U -> R
-    | R -> D
-    | D -> L
-    | L -> U
-    { node with Direction = rotate node.Direction; StepsInDirection = 0 }
+    { node with
+        StepsInDirection = node.StepsInDirection + 1
+        Location = shift delta node.Location }
+
+let left (node: Node) =
+    let rotate =
+        function
+        | U -> L
+        | L -> D
+        | D -> R
+        | R -> U
+
+    { node with
+        Direction = rotate node.Direction
+        StepsInDirection = 0 }
     |> fwd
 
-let successors grid (node : Node) = 
+let right (node: Node) =
+    let rotate =
+        function
+        | U -> R
+        | R -> D
+        | D -> L
+        | L -> U
+
+    { node with
+        Direction = rotate node.Direction
+        StepsInDirection = 0 }
+    |> fwd
+
+let successors grid (node: Node) =
     //must move 4 steps before we can turn
     //can move 10 steps in a single direction max, then we must turn
-    [
-        if node.StepsInDirection < 10 then yield (fwd node)
-        if 4 <= node.StepsInDirection then 
-            yield left node
-            yield right node
-    ]
-    |> List.filter (_.Location >> (grid |> Grid.contains))
+    [ if node.StepsInDirection < 10 then
+          yield (fwd node)
+      if 4 <= node.StepsInDirection then
+          yield left node
+          yield right node ]
+    |> List.filter (fun x -> grid |> Grid.contains x.Location)
 
-let cost (grid: Grid) cumulDist (node : Node) = 
+let cost (grid: Grid) cumulDist (node: Node) =
     let c = grid |> Grid.at node.Location
     cumulDist + c
 
-let solve input = 
+let foundGoal goal (node: Node) = node.Location = goal
+
+let solve input =
     let grid = parse input
-    let start = (0, 0)
+    let start = 0, 0
 
     let queue: DPQ.State<Node> =
         [ (0,
@@ -160,35 +174,39 @@ let solve input =
         |> DPQ.ofSeq
 
     let result = dijkstra (successors grid) (cost grid) queue
-    let ((_,xmax),(_,ymax)) = grid |> Grid.boundaries
-    let minDist = 
-        result.Distances 
-        |> Map.filter (fun n _ -> n.Location = (xmax,ymax))
+    let ((_, xmax), (_, ymax)) = grid |> Grid.boundaries
+
+    let minDist =
+        result.Distances
+        |> Map.filter (fun n _ -> n.Location = (xmax, ymax))
         //We need to have at least 4 steps when reaching the finish, other states are illegal.
         |> Map.filter (fun n _ -> n.StepsInDirection >= 4)
         |> Map.values
         |> Seq.min
-    minDist
 
-#time
-//Real: 00:00:09.803, CPU: 00:00:11.250, GC gen0: 8, gen1: 0, gen2: 0
-//solve input
+    minDist
 
 let run () =
     printf "Testing.."
     test <@ solve example = 94 @>
 
-    test <@ 
-            let example =
-                """ 111111111111
+    test
+        <@ let example =
+            """ 111111111111
                     999999999991
                     999999999991
                     999999999991
                     999999999991"""
-                    .Split("\n")
-                |> Array.map (fun s -> s.Trim())
-                |> List.ofSeq
-            solve example = 71 @>
+                .Split("\n")
+            |> Array.map (fun s -> s.Trim())
+            |> List.ofSeq
+
+           solve example = 71 @>
+
     printfn "...done!"
 
 run ()
+
+#time
+//Real: 00:00:06.342, CPU: 00:00:07.609, GC gen0: 12, gen1: 0, gen2: 0
+//solve input
