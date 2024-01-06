@@ -156,8 +156,6 @@ let cost (grid: Grid) cumulDist (node: Node) =
     let c = grid |> Grid.at node.Location
     cumulDist + c
 
-let foundGoal goal (node: Node) = node.Location = goal
-
 let solve input =
     let grid = parse input
     let start = 0, 0

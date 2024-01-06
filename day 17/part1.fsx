@@ -111,7 +111,6 @@ let fwd (node : Node) =
         | L -> (0,-1)
         | R -> (0,1)
     { node with StepsInDirection = node.StepsInDirection + 1; Location = shift delta node.Location }
-
 let left (node : Node) = 
     let rotate = function
     | U -> L
