@@ -39,22 +39,31 @@ type Direction =
     | L
     | R
 
-type Instruction = { Direction: Direction; Distance: int }
+type Instruction =
+    { Direction: Direction
+      Distance: int64 }
 
 let parseInstruction (line: string) : Instruction =
-    let tokens = line.Split(" ")
+    let hex =
+        line.Split(" ")
+        |> Seq.last
+        |> (fun s -> s.Substring(2, 6))
+
+    let hexDist = hex.Substring(0, 5)
+    let hexDir = hex |> Seq.last
+    let toLong d = System.Convert.ToInt64(hexDist, 16)
 
     let parseDirection =
         function
-        | "L" -> L
-        | "D" -> D
-        | "U" -> U
-        | "R" -> R
+        | '0' -> R
+        | '1' -> D
+        | '2' -> L
+        | '3' -> U
 
-    { Direction = parseDirection (tokens[0])
-      Distance = int tokens[1] }
+    { Direction = parseDirection hexDir
+      Distance = toLong hexDist }
 
-let area points =
+let area (points: ((int64 * int64) list)) =
     //shoelace formula
     points
     |> List.pairwise
@@ -71,11 +80,11 @@ let nbTrenchCubes trench =
 
     nbTrench
 
-let nbInternalCubes (nbOnBorder: int) (A: decimal) =
+let nbInternalCubes (nbOnBorder: int64) (A: decimal) =
     //pick's theorem
     // A = i + b/2 - 1
     // i = A + 1 - b/2
-    let i = A + 1m - (decimal nbOnBorder) / 2m |> int
+    let i = A + 1m - (decimal nbOnBorder) / 2m |> int64
     i
 
 let totalCubes trench =
@@ -88,7 +97,7 @@ let totalCubes trench =
 
     nbTrench + nbInternal
 
-type Location = int * int
+type Location = int64 * int64
 type Trench = Location list
 
 let apply (i: Instruction) (x, y) =
@@ -104,11 +113,12 @@ let folder (trench: Trench) (instruction: Instruction) : Trench =
 
 let solve input =
     let instructions = input |> List.map parseInstruction
-    let trench = instructions |> List.fold folder [ 0, 0 ]
+    let trench = instructions |> List.fold folder [ 0L, 0L ]
     totalCubes trench
 
 let run () =
     printf "Testing.."
+    test <@ parseInstruction "L 2 (#015232)" = { Direction = L; Distance = 5411L } @>
 
     test
         <@ area [ (1, 6)
@@ -119,18 +129,18 @@ let run () =
                   (1, 6) ] = 16.5m @>
 
     let square =
-        [ (0, 0)
-          (2, 0)
-          (2, 2)
-          (0, 2)
-          (0, 0) ] //8 on trench, 1 internal
+        [ (0L, 0L)
+          (2L, 0L)
+          (2L, 2L)
+          (0L, 2L)
+          (0L, 0L) ] //8 on trench, 1 internal
 
     test <@ nbTrenchCubes square = 8 @>
     test <@ area square = 4m @>
     test <@ nbInternalCubes 8 4m = 1 @>
     test <@ totalCubes square = 9 @>
 
-    test <@ solve example = 62 @>
+    test <@ solve example = 952408144115L @>
     printfn "...done!"
 
 run ()
