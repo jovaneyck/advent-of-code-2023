@@ -22,16 +22,13 @@ hdj{m>838:A,pv}
 {x=2461,m=1339,a=466,s=291}
 {x=2127,m=1623,a=2188,s=1013}"""
 
-type Part = { x: int; m: int; a: int; s: int }
+type InclusiveRange = { Start: int; End: int }
 
-let parsePart (part: string) : Part =
-    let [| x; m; a; s |] = part.Substring(1, part.Length - 2).Split(",")
-    let parseInt (t: string) = t.Substring(2, t.Length - 2) |> int
-
-    { x = parseInt x
-      m = parseInt m
-      a = parseInt a
-      s = parseInt s }
+type Part =
+    { x: InclusiveRange
+      m: InclusiveRange
+      a: InclusiveRange
+      s: InclusiveRange }
 
 type Outcome =
     | Accept
@@ -39,7 +36,7 @@ type Outcome =
 
 type Output =
     | Outcome of Outcome
-    | NextRule of string
+    | NextWorkflow of string
 
 type Criterium =
     | X
@@ -60,12 +57,14 @@ type Rule =
     | Condition of Condition * Output
     | Output of Output
 
+type Workflow = { Name: string; Rules: Rule list }
+
 let parseRule (rule: string) : Rule =
     let parseOutput =
         function
         | "A" -> Outcome Accept
         | "R" -> Outcome Reject
-        | output -> NextRule output
+        | output -> NextWorkflow output
 
     let parseCriterium =
         function
@@ -103,8 +102,6 @@ let parseRule (rule: string) : Rule =
     else
         Rule.Output(parseOutput rule)
 
-type Workflow = { Name: string; Rules: Rule list }
-
 let parseWorkflow (workflow: string) : Workflow =
     let [| name; rem |] =
         workflow
@@ -115,55 +112,8 @@ let parseWorkflow (workflow: string) : Workflow =
     let rules = rawrules |> Array.map parseRule |> Array.toList
     { Name = name; Rules = rules }
 
-let applyWorkflow (wf: Workflow) (p: Part) : Output =
-    let get (p: Part) =
-        function
-        | X -> p.x
-        | M -> p.m
-        | A -> p.a
-        | S -> p.s
-
-    let applies p (c: Condition) =
-        //crit * operator * operand
-        let crit = c.Criterium |> get p
-
-        match c.Operator with
-        | LT -> crit < c.Operand
-        | GT -> c.Operand < crit
-
-    let apply (r: Rule) p =
-        match r with
-        | Output o -> Some o
-        | Condition (c, o) -> if c |> applies p then Some o else None
-
-    let rec applyRules rules p =
-        let nextRule = rules |> List.head
-        let r = apply nextRule p
-
-        match r with
-        | Some output -> output
-        | None -> applyRules (rules |> List.tail) p
-
-    applyRules wf.Rules p
-
-let rec runWorkflow workflows part start =
-    let wf = workflows |> Map.find start
-    let result = applyWorkflow wf part
-
-    match result with
-    | Outcome o -> o
-    | NextRule nr -> runWorkflow workflows part nr
-
-let apply workflows part = runWorkflow workflows part "in"
-let rating (part: Part) = part.x + part.m + part.a + part.s
-
 let parse (input: string) =
-    let [| rawworkflows; rawparts |] = input.Replace("\r\n", "\n").Split("\n\n")
-
-    let parts =
-        rawparts.Split("\n")
-        |> List.ofSeq
-        |> List.map parsePart
+    let [| rawworkflows; _ |] = input.Replace("\r\n", "\n").Split("\n\n")
 
     let workflows =
         rawworkflows.Split("\n")
@@ -172,59 +122,90 @@ let parse (input: string) =
         |> List.map (fun w -> w.Name, w)
         |> Map.ofList
 
-    parts, workflows
+    workflows
 
-let parts, workflows = parse example
+type Split = { True: Part; False: Part }
 
-let ratings =
-    parts
-    |> List.map (fun p -> p, apply workflows p)
-    |> List.filter (
-        snd
-        >> (function
-        | Accept -> true
-        | Reject -> false)
-    )
-    |> List.map fst
-    |> List.map rating
+let apply workflows (spec: Part) =
+    let split (spec: Part) (condition: Condition) : Split =
+        match condition.Criterium, condition.Operator, condition.Operand with
+        | X, LT, o ->
+            { True = { spec with x.End = o - 1 }
+              False = { spec with x.Start = o } }
+        | M, LT, o ->
+            { True = { spec with m.End = o - 1 }
+              False = { spec with m.Start = o } }
+        | A, LT, o ->
+            { True = { spec with a.End = o - 1 }
+              False = { spec with a.Start = o } }
+        | S, LT, o ->
+            { True = { spec with s.End = o - 1 }
+              False = { spec with s.Start = o } }
+        | X, GT, o ->
+            { True = { spec with x.Start = o + 1 }
+              False = { spec with x.End = o } }
+        | M, GT, o ->
+            { True = { spec with m.Start = o + 1 }
+              False = { spec with m.End = o } }
+        | A, GT, o ->
+            { True = { spec with a.Start = o + 1 }
+              False = { spec with a.End = o } }
+        | S, GT, o ->
+            { True = { spec with s.Start = o + 1 }
+              False = { spec with s.End = o } }
 
-let result = ratings |> List.sum
+    let rec applyRules workflows (spec: Part) (rules: Rule list) =
+        let (r :: rs) = rules
 
-let run () =
-    printf "Testing.."
+        match r with
+        | Output (Outcome (Reject)) -> [] //We don't care
+        | Output (Outcome (Accept)) -> [ spec ] //We found a range that's accepted!
+        | Output (NextWorkflow next) -> applyWorkflow workflows spec next
+        | Condition (c, o) ->
+            //We need to treat both evaluations of the predicate
+            let splits = split spec c
 
-    test
-        <@ parsePart "{x=787,m=2655,a=1222,s=2876}" = { x = 787
-                                                        m = 2655
-                                                        a = 1222
-                                                        s = 2876 } @>
+            let trues =
+                match o with
+                | Outcome Accept -> [ splits.True ]
+                | Outcome Reject -> []
+                | NextWorkflow next -> applyWorkflow workflows splits.True next
 
-    test
-        <@ let wf = parseWorkflow "qqz{s>2770:qs,m<1801:hdj,R}"
+            let falses = applyRules workflows splits.False rs
+            List.append trues falses
 
-           wf = { Name = "qqz"
-                  Rules =
-                    [ Condition(
-                          { Criterium = S
-                            Operator = GT
-                            Operand = 2770 },
-                          NextRule "qs"
-                      )
-                      Condition(
-                          { Criterium = M
-                            Operator = LT
-                            Operand = 1801 },
-                          NextRule "hdj"
-                      )
-                      Output(Outcome Reject) ] } @>
+    and applyWorkflow workflows (spec: Part) name : Part list =
+        let wf: Workflow = workflows |> Map.find name
+        applyRules workflows spec wf.Rules
 
-    test
-        <@ rating
-            { x = 787
-              m = 2655
-              a = 1222
-              s = 2876 } = 7540 @>
+    applyWorkflow workflows spec "in"
 
-    printfn "...done!"
+//We could have simply not generated invalid ranges, but this is simpler :)
+let partSize (p: Part) : int64 =
+    let size (r: InclusiveRange) =
+        if r.Start <= r.End then
+            1L + (int64 (r.End - r.Start))
+        else
+            0L //shortcut: if one of a part's ranges is 0 the entire part represents 0
 
-run ()
+    [ p.x; p.m; p.a; p.s ]
+    |> List.map size
+    |> List.reduce (*)
+
+let solve input =
+
+    let workflows = parse input
+
+    let init =
+        { x = { Start = 1; End = 4000 }
+          m = { Start = 1; End = 4000 }
+          a = { Start = 1; End = 4000 }
+          s = { Start = 1; End = 4000 } }
+
+    init
+    |> apply workflows
+    |> List.map partSize
+    |> List.sum
+
+solve example
+solve input
