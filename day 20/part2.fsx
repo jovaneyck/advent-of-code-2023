@@ -121,10 +121,19 @@ let rec send (state: State) : State =
     | [] -> state
     | propagation :: rest ->
         let dest = propagation.To
+        //{rv vp dc cq}
+        if propagation.From = "cq"
+           && propagation.Pulse = High then
+            failwith "FOUND YOU!"
+
         let m = state.Modules |> Map.tryFind dest
 
         match m with
-        | None -> send {state with Queue = rest; Propagated = propagation :: state.Propagated}
+        | None ->
+            send
+                { state with
+                    Queue = rest
+                    Propagated = propagation :: state.Propagated }
         | Some (Broadcaster b) ->
             let tasks =
                 b.Outputs
@@ -206,49 +215,52 @@ let init mods =
             Pulse = Low } ] }
 
 let rec sendMany n s =
-    if n = 0 then
-        s
-    else
-        sendMany
-            (n - 1)
-            (send
-                { s with
-                    Queue =
-                        [ { From = "button"
-                            To = "broadcaster"
-                            Pulse = Low } ] })
+    printfn "press # %d" n
 
-let solve input = 
+    sendMany
+        (n + 1L)
+        (send
+            { s with
+                Queue =
+                    [ { From = "button"
+                        To = "broadcaster"
+                        Pulse = Low } ] })
+
+let solve input =
     let mods =
         input
         |> parse
         |> List.map (fun m -> (m |> Module.id, m))
         |> Map.ofSeq
-    let s = mods |> init |> sendMany 1000
-    let [highs;lows] = s.Propagated |> List.groupBy _.Pulse
-    let (nbhighs,nblows) = highs |> snd |> Seq.length, lows |> snd |> Seq.length
+
+    let s = mods |> init |> sendMany 1L
+
+    let [ highs; lows ] =
+        s.Propagated
+        |> List.groupBy (fun prop -> prop.Pulse)
+
+    let (nbhighs, nblows) = highs |> snd |> Seq.length, lows |> snd |> Seq.length
     let solution = nbhighs * nblows
     solution
 
-let run () =
-    printf "Testing.."
-    test <@ parseModule "broadcaster -> a, b, c" = Broadcaster {| Outputs = [ "a"; "b"; "c" ] |} @>
+let toDotGraph (m: Module) =
+    let outs =
+        (Module.outputs m)
+        |> Seq.map string
+        |> String.concat " "
 
-    test
-        <@ parseModule "%a -> inv, con" = FlipFlop
-                                              {| Id = "a"
-                                                 Outputs = [ "inv"; "con" ]
-                                                 State = Off |} @>
+    sprintf "%s -> {%s}" (Module.id m) outs
 
-    test
-        <@ parseModule "&inv -> a" = Conjunction
-                                         {| Id = "inv"
-                                            Inputs = Map.empty
-                                            Outputs = [ "a" ] |} @>
+input
+|> parse
+|> List.map toDotGraph
+|> String.concat "\n"
+|> printfn "%s"
 
-    test <@ solve example = 32000000 @>
-    test <@ solve example2 = 11687500 @>
-    printfn "...done!"
-
-run ()
+//rx <- ns <- {rv vp dc cq}
 solve input
+// rv: 4051
+// vp: 3847
+// dc: 3797
+// cq: 3877
+4051L * 3847L * 3797L * 3877L
