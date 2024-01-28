@@ -51,17 +51,9 @@ module Grid =
         |> List.map (fun (dr, dc) -> (r + dr, c + dc))
 
     let nextCells (grid: Grid) (r, c) =
-        let falldown =
-            function
-            | Slope '>' -> (r, c + 1)
-            | Slope '<' -> (r, c - 1)
-            | Slope 'v' -> (r + 1, c)
-            | Slope '^' -> (r - 1, c)
-            | err -> failwithf "Problem! %A" err
-
         match grid[r, c] with
-        | Forest -> failwith "I'm standing in a forest, should never happen"
-        | Slope s -> [ falldown (Slope s) ]
+        | Slope s -> failwith "Part 2 does not contain slopes!"
+        | Forest -> []
         | Path ->
             next grid (r, c)
             |> List.filter (fun (pr, pc) ->
@@ -69,39 +61,42 @@ module Grid =
                 | Forest -> false
                 | _ -> true)
 
-let parseCell =
-    function
-    | '.' -> Path
-    | '#' -> Forest
-    | slope -> Slope slope
-
 let parse input : Grid =
+    let parseCell =
+        function
+        | '.' -> Path
+        | '#' -> Forest
+        | slope -> Slope slope
+
     input |> array2D |> Array2D.map parseCell
 
-type Queue = ((int * int) * Set<int * int> * ((int * int) list)) list
+type Stack = ((int * int) * Set<int * int> * int) list
+type NeighbourMap = (Set<int * int>) [,]
 
-let rec longestPath grid finish (acc: ((int * int) list list)) (q: Queue) : (int * int) list =
+let rec longestPath (neighbours: NeighbourMap) finish (acc: int) (q: Stack) : int =
     match q with
-    | [] ->
-        acc
-        |> List.sortByDescending (fun p -> p |> List.length)
-        |> List.head
-    | (current, visited, path) :: rq ->
+    | [] -> acc
+    | (current, visited, length) :: rq ->
         if current = finish then
-            longestPath grid finish (path :: acc) rq
+            let nextAcc =
+                if length > acc then
+                    printfn "%d;%d" length (q |> Seq.length)
+                    length
+                else
+                    acc
+
+            longestPath neighbours finish nextAcc rq
         else
-            let next =
-                Grid.nextCells grid current
-                |> List.except (visited |> Set.toList)
+            let next = Set.difference neighbours[fst current, snd current] visited
+            let nlength = 1 + length
+            let nvisited = visited |> Set.add current
 
-            if next |> List.isEmpty then
-                longestPath grid finish acc rq
-            else
-                let nq: Queue =
-                    next
-                    |> List.map (fun n -> (n, visited |> Set.add current, (n :: path)))
+            let nq: Stack =
+                next
+                |> Seq.map (fun n -> (n, nvisited, nlength))
+                |> Seq.toList
 
-                longestPath grid finish acc (nq @ rq)
+            longestPath neighbours finish acc (nq @ rq)
 
 let run () =
     printf "Testing.."
@@ -120,36 +115,18 @@ let run () =
 run ()
 
 let grid =
-    parse example
+    parse input
     |> Array2D.map (function
         | Slope _ -> Path
         | x -> x)
 
+let neighbours =
+    grid
+    |> Array2D.mapi (fun r c _ -> Grid.nextCells grid (r, c) |> Set.ofList)
+
 let start = (0, 1)
 let finish = (Array2D.length1 grid - 1), (Array2D.length2 grid - 2)
-let visited = Set.singleton start
+
 #time
-
-let path = longestPath grid finish [] [ (start, visited, []) ]
-let result = path |> List.length
-
-let render =
-    function
-    | Path -> '.'
-    | Forest -> '#'
-    | _ -> failwith "huh?"
-
-let tostring grid path =
-    [ for r in 0 .. (Array2D.length1 grid - 1) do
-          [ for c in 0 .. (Array2D.length2 grid - 1) do
-                if path |> List.contains (r, c) then
-                    'O'
-                else
-                    render grid[r, c] ]
-          |> List.map string
-          |> String.concat "" ]
-    |> String.concat "\n"
-
-let s = tostring grid path
-
-printfn "%s" s
+//6434
+let result = longestPath neighbours finish 0 [ (start, Set.singleton start, 0) ]

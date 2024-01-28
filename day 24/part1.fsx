@@ -32,7 +32,7 @@ module TwoDimensionalLine =
         else
             let x = (d - b) / (a - c)
             let y = a * x + b
-            Some(x, y, -1)
+            Some(x, y, -1m)
 
 type HailStone =
     { Location: ThreeDimensionalCoordinate
@@ -119,6 +119,6 @@ let intersectionsInBox =
     lines
     |> combinations
     |> List.map (fun (one, other) -> TwoDimensionalLine.intersection one other)
-    |> List.iter (printfn "%A")
+    //|> List.iter (printfn "%A")
     |> List.choose id
     |> List.filter (inBox (7m, 27m))
