@@ -113,7 +113,7 @@ let run () =
 
 run ()
 
-let hailstones = example |> List.map parse
+let hailstones = input |> List.map parse
 let lines = hailstones |> List.map HailStone.to2DLine
 let both = List.zip hailstones lines
 
@@ -132,10 +132,6 @@ let intersectionsInBox =
                 Velocity = hs2dx, hs2dy, hs2dz },
               _) ->
             (x - hs1x) * hs1dx >= 0m
-            && (x - hs2x) * hs2dx >= 0m
-            && (y - hs1y) * hs1dy >= 0m
-            && (y - hs2y) * hs2dy >= 0m
-            && (z - hs1z) * hs1dz >= 0m
-            && (z - hs2z) * hs2dz >= 0m)
-    |> List.filter (fun (intersection, hs1, l1, hs2, l2) -> inBox (7m, 27m) intersection)
+            && (x - hs2x) * hs2dx >= 0m)
+    |> List.filter (fun (intersection, hs1, l1, hs2, l2) -> inBox (200000000000000m, 400000000000000m) intersection)
     |> List.length
