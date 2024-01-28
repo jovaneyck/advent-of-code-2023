@@ -40,6 +40,10 @@ type Cell =
 
 type Grid = Cell [,]
 
+type Cost = int
+type Location = int * int
+type NeighbourMap = ((Cost * Location) list) [,]
+
 module Grid =
     let next grid (r, c) =
         [ if r > 0 then yield (-1, 0)
@@ -61,72 +65,100 @@ module Grid =
                 | Forest -> false
                 | _ -> true)
 
-let parse input : Grid =
-    let parseCell =
-        function
-        | '.' -> Path
-        | '#' -> Forest
-        | slope -> Slope slope
+    let parse input : Grid =
+        let parseCell =
+            function
+            | '.' -> Path
+            | '#' -> Forest
+            | slope -> Slope slope
 
-    input |> array2D |> Array2D.map parseCell
+        input |> array2D |> Array2D.map parseCell
 
-type Stack = ((int * int) * Set<int * int> * int) list
-type NeighbourMap = (Set<int * int>) [,]
+    let rec distancesTo visited g nodes node : (Cost * Location) list =
+        let next = nextCells g node |> List.except visited
+
+        let hits, misses =
+            next
+            |> List.partition (fun n -> nodes |> Seq.contains n)
+
+        let nVisited = next @ visited
+
+        let recHits =
+            misses
+            |> List.collect (fun m ->
+                distancesTo nVisited g nodes m
+                |> List.map (fun (w, l) -> (w + 1, l)))
+
+        let weightedHits = hits |> List.map (fun n -> 1, n)
+        weightedHits @ recHits
+
+    let compact alreadyInterestingNodes (g: Grid) : NeighbourMap =
+        let nodesWithChoice =
+            [ for r in 0 .. (Array2D.length1 g - 1) do
+                  for c in 0 .. (Array2D.length2 g - 1) do
+                      if nextCells g (r, c) |> Seq.length > 2 then
+                          yield (r, c) ]
+
+        let nodes = alreadyInterestingNodes @ nodesWithChoice
+
+        let distanceMap =
+            nodes
+            |> List.map (fun node -> node, distancesTo [ node ] g nodes node)
+            |> Map.ofList
+
+        let result =
+            g
+            |> Array2D.mapi (fun r c _ ->
+                match distanceMap |> Map.tryFind (r, c) with
+                | None -> []
+                | Some weightedNodes -> weightedNodes)
+
+        result
+
+type Stack = (Location * Set<Location> * Cost) list
 
 let rec longestPath (neighbours: NeighbourMap) finish (acc: int) (q: Stack) : int =
     match q with
     | [] -> acc
-    | (current, visited, length) :: rq ->
+    | (current, visited, currentCost) :: rq ->
         if current = finish then
             let nextAcc =
-                if length > acc then
-                    printfn "%d;%d" length (q |> Seq.length)
-                    length
+                if currentCost > acc then
+                    printfn "%d;%d" currentCost (q |> Seq.length)
+                    currentCost
                 else
                     acc
 
             longestPath neighbours finish nextAcc rq
         else
-            let next = Set.difference neighbours[fst current, snd current] visited
-            let nlength = 1 + length
+            let weightedNeighbours = neighbours[fst current, snd current]
+
+            let next =
+                weightedNeighbours
+                |> List.filter (fun (_, n) -> visited |> Set.contains n |> not)
+
             let nvisited = visited |> Set.add current
 
             let nq: Stack =
                 next
-                |> Seq.map (fun n -> (n, nvisited, nlength))
+                |> Seq.map (fun (cost, n) -> (n, nvisited, currentCost + cost))
                 |> Seq.toList
 
             longestPath neighbours finish acc (nq @ rq)
 
-let run () =
-    printf "Testing.."
-
-    let m =
-        [ [ 1; 2; 3 ]
-          [ 3; 4; 5 ]
-          [ 5; 6; 7 ] ]
-        |> array2D
-
-    test <@ Grid.next m (1, 1) = [ (0, 1); (2, 1); (1, 0); (1, 2) ] @>
-    test <@ Grid.next m (0, 0) = [ (1, 0); (0, 1) ] @>
-
-    printfn "...done!"
-
-run ()
-
 let grid =
-    parse input
+    Grid.parse input
     |> Array2D.map (function
         | Slope _ -> Path
         | x -> x)
 
-let neighbours =
-    grid
-    |> Array2D.mapi (fun r c _ -> Grid.nextCells grid (r, c) |> Set.ofList)
-
 let start = (0, 1)
 let finish = (Array2D.length1 grid - 1), (Array2D.length2 grid - 2)
 
+let compacted = grid |> Grid.compact [ start; finish ]
+
 #time
-//6434
-let result = longestPath neighbours finish 0 [ (start, Set.singleton start, 0) ]
+//example: 154
+//Real: 00:00:46.480, CPU: 00:00:47.453, GC gen0: 931, gen1: 0, gen2: 0
+//val result: int = 6874
+let result = longestPath compacted finish 0 [ (start, Set.singleton start, 0) ]
