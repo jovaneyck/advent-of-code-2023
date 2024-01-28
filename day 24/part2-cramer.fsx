@@ -47,7 +47,6 @@ y,z: 0x         + (f2 - f1)y    + (e1 - e2)z    + 0 dx          + (c1 - c2)dy   
 
 Use 2 different sets of hailstones (h1,h2) to get 6 equations in 6 variables
 Solve A*x=b
-
 *)
 
 let generateEquations (h1: HailStone) (h2: HailStone) =

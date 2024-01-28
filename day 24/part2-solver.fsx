@@ -46,14 +46,14 @@ let generateConstraintsFor n h =
     let (hs1x, hs1y, hs1z) = h.Location
     let (hs1dx, hs1dy, hs1dz) = h.Velocity
 
-    [| (rx - hs1x) / (hs1dx - rdx) =. ti
-       (ry - hs1y) / (hs1dy - rdy) =. ti
-       (rz - hs1z) / (hs1dz - rdz) =. ti |]
+    [| rx + ti * rdx =. hs1x + ti * hs1dx
+       ry + ti * rdy =. hs1y + ti * hs1dy
+       rz + ti * rdz =. hs1z + ti * hs1dz |]
 
 let constraints =
     input
     |> Seq.map HailStone.parse
-    |> Seq.take 4
+    |> Seq.take 3
     |> Seq.indexed
     |> Seq.map (fun (i, hs) -> generateConstraintsFor i hs)
     |> Seq.collect id
