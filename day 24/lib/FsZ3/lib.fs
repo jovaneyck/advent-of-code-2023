@@ -1,4 +1,5 @@
-﻿module public Microsoft
+﻿//TODO: revive fsz3 github, the nuget was painfully out of date, ended up monkeypatching:
+module public Microsoft
 
 module Z3 =
     open System
