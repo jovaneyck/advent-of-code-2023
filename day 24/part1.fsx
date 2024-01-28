@@ -113,12 +113,29 @@ let run () =
 
 run ()
 
-let lines = example |> List.map (parse >> HailStone.to2DLine)
-//"crossed in the PAST" aka negative velocity applied
+let hailstones = example |> List.map parse
+let lines = hailstones |> List.map HailStone.to2DLine
+let both = List.zip hailstones lines
+
 let intersectionsInBox =
-    lines
+    both
     |> combinations
-    |> List.map (fun (one, other) -> TwoDimensionalLine.intersection one other)
-    //|> List.iter (printfn "%A")
-    |> List.choose id
-    |> List.filter (inBox (7m, 27m))
+    |> List.choose (fun ((hs1, l1), (hs2, l2)) ->
+        TwoDimensionalLine.intersection l1 l2
+        |> Option.map (fun intersection -> intersection, hs1, l1, hs2, l2))
+    |> List.filter
+        (fun ((x, y, z),
+              { Location = hs1x, hs1y, hs1z
+                Velocity = hs1dx, hs1dy, hs1dz },
+              _,
+              { Location = hs2x, hs2y, hs2z
+                Velocity = hs2dx, hs2dy, hs2dz },
+              _) ->
+            (x - hs1x) * hs1dx >= 0m
+            && (x - hs2x) * hs2dx >= 0m
+            && (y - hs1y) * hs1dy >= 0m
+            && (y - hs2y) * hs2dy >= 0m
+            && (z - hs1z) * hs1dz >= 0m
+            && (z - hs2z) * hs2dz >= 0m)
+    |> List.filter (fun (intersection, hs1, l1, hs2, l2) -> inBox (7m, 27m) intersection)
+    |> List.length
