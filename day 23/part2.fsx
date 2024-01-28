@@ -39,7 +39,6 @@ type Cell =
     | Slope of char
 
 type Grid = Cell [,]
-
 type Cost = int
 type Location = int * int
 type NeighbourMap = ((Cost * Location) list) [,]
