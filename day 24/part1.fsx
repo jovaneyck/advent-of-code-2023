@@ -23,9 +23,6 @@ type ThreeDimensionalCoordinate = decimal * decimal * decimal
 type TwoDimensionalLine = { A: decimal; B: decimal }
 
 module TwoDimensionalLine =
-    let X y line = (y - line.B) / line.A
-    let Y x line = (line.A * x) + line.B
-
     let intersection { A = a; B = b } { A = c; B = d } : ThreeDimensionalCoordinate option =
         if (a - c) = 0m then
             None
