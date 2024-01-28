@@ -124,6 +124,7 @@ let intersectionsInBox =
         TwoDimensionalLine.intersection l1 l2
         |> Option.map (fun intersection -> intersection, hs1, l1, hs2, l2))
     |> List.filter
+        //Only "move forward in time" aka apply velocity positively
         (fun ((x, y, z),
               { Location = hs1x, hs1y, hs1z
                 Velocity = hs1dx, hs1dy, hs1dz },
